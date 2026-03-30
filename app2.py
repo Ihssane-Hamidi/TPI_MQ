@@ -52,8 +52,8 @@ html, body, [class*="css"] { font-family: 'IBM Plex Sans', sans-serif; }
 
 # ── CHEMINS ───────────────────────────────────────────────────────────────────
 LOCAL_DIR  = '/Users/hamidi/Desktop/'
-METRIQUES_F = 'mq_metriques.parquet'
-PRIX_F      = 'mq_prix_journaliers.parquet'
+METRIQUES_F  = 'mq2_metriques.parquet'
+PRIX_F       = 'mq2_prix_journaliers.parquet'
 
 # ⚠ Mettre à jour avec ton URL GitHub Release après upload
 GITHUB_RELEASE_URL = "https://github.com/Ihssane-Hamidi/TPI_MQ/releases/download/v1.0/"
