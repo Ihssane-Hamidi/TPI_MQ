@@ -8,3 +8,9 @@ statsmodels
 scipy
 pyarrow
 requests
+streamlit
+pandas
+numpy
+plotly
+statsmodels
+scipy
