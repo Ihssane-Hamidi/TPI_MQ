@@ -504,7 +504,11 @@ def page_strategique(valid, prices, brent, rallies, narrative_col='Narrative', t
        tickers_cat = [t for t in tickers_cat if t in prices.columns]
        if not tickers_cat: continue
        
-       cum_par_ticker = (1 + prices[tickers_cat].pct_change()).cumprod() - 1
+       px_cat = prices[tickers_cat].copy()
+       first_common = px_cat.dropna(how='all').index[0]
+       px_cat = px_cat.loc[first_common:].ffill()
+
+       cum_par_ticker = (1 + px_cat.pct_change()).cumprod() - 1
        cum_r = cum_par_ticker.mean(axis=1).dropna()
        
        fig.add_trace(go.Scatter(
