@@ -34,26 +34,36 @@ st.set_page_config(
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
-html, body, [class*="css"] { font-family: 'IBM Plex Sans', sans-serif; }
+
+/* 1. Reset global plus petit */
+html, body, [class*="st-"], .stMarkdown { 
+    font-family: 'IBM Plex Sans', sans-serif; 
+    font-size: 13px; 
+}
+
+/* 2. Tes cartes métriques */
 .metric-card {
    background: #0f1117; border: 1px solid #2a2d35;
-   border-radius: 8px; padding: 16px 20px; margin-bottom: 8px;
+   border-radius: 8px; padding: 12px 16px; margin-bottom: 8px;
 }
-.metric-label { font-size: 11px; color: #6b7280; letter-spacing: 0.08em;
-   text-transform: uppercase; margin-bottom: 4px; }
-.metric-value { font-family: 'IBM Plex Mono', monospace; font-size: 22px; font-weight: 500; }
-.score-badge { display: inline-block; padding: 6px 14px; border-radius: 4px;
-   font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 500; }
-.section-title { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
-   color: #6b7280; margin: 24px 0 12px; border-bottom: 1px solid #2a2d35; padding-bottom: 6px; }
-.note-box { background: #0f1a2e; border: 1px solid #1e3a5f; border-radius: 6px;
-   padding: 10px 14px; font-size: 12px; color: #93c5fd; margin-top: 8px; line-height: 1.6; }
-.warn-box { background: #1c1a0e; border: 1px solid #713f12; border-radius: 6px;
-   padding: 10px 14px; font-size: 12px; color: #fde68a; margin-top: 8px; line-height: 1.6; }
-.dataset-badge-mq  { background:#1e3a5f; color:#93c5fd; padding:4px 12px;
-   border-radius:4px; font-size:12px; font-weight:600; }
-.dataset-badge-act { background:#1a3320; color:#86efac; padding:4px 12px;
-   border-radius:4px; font-size:12px; font-weight:600; }
+.metric-label { 
+    font-size: 10px; color: #6b7280; letter-spacing: 0.08em;
+    text-transform: uppercase; margin-bottom: 2px; 
+}
+.metric-value { 
+    font-family: 'IBM Plex Mono', monospace; font-size: 19px; font-weight: 500; 
+}
+
+/* 3. Ajustement des titres de section */
+.section-title { 
+    font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: #6b7280; margin: 16px 0 8px; border-bottom: 1px solid #2a2d35; padding-bottom: 4px; 
+}
+
+/* 4. Les badges et boîtes */
+.score-badge { padding: 4px 10px; font-size: 11px; }
+.note-box, .warn-box { font-size: 11px; padding: 8px 12px; }
+.dataset-badge-mq, .dataset-badge-act { font-size: 11px; padding: 2px 10px; }
 </style>
 """, unsafe_allow_html=True)
 
