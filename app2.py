@@ -309,72 +309,41 @@ def page_societe(valid, prices, brent, rallies,
    st.plotly_chart(plot_metriques_periode(row, periods, labels), use_container_width=True)
 
 def page_panel(valid, prices, brent, rallies, quintile_col, company_col='Company Name'):
-    """Page panel quintiles commune."""
-    st.markdown("### Panel · Rendements cumulés par quintile")
-    st.markdown('<p class="section-title">Q1 (scores faibles) → Q5 (scores élevés) · Zones bleues = hausses Brent</p>',
-                unsafe_allow_html=True)
+   """Page panel quintiles commune."""
+   st.markdown("### Panel · Rendements cumulés par quintile")
+   st.markdown('<p class="section-title">Q1 (scores faibles) → Q5 (scores élevés) · Zones bleues = hausses Brent</p>',
+               unsafe_allow_html=True)
 
-    # --- 1. SÉCURITÉ : Tri des index par date ---
-    prices = prices.sort_index()
-    brent = brent.sort_index()
+   brent_norm = brent / brent.iloc[0] * 100
+   fig = make_subplots(specs=[[{"secondary_y": True}]])
+   fig = add_oil_rectangles(fig, rallies, first_only=True)
+   fig.add_hline(y=0, line_width=0.5, line_color='rgba(255,255,255,0.15)')
 
-    # Normalisation du Brent
-    brent_norm = brent / brent.iloc[0] * 100
-    
-    fig = make_subplots(specs=[[{"secondary_y": True}]])
-    fig = add_oil_rectangles(fig, rallies, first_only=True)
-    fig.add_hline(y=0, line_width=0.5, line_color='rgba(255,255,255,0.15)')
+   for q in ['Q1','Q2','Q3','Q4','Q5']:
+       tickers_q = valid[valid[quintile_col]==q]['ticker'].dropna().tolist()
+       tickers_q = [t for t in tickers_q if t in prices.columns]
+       if not tickers_q: continue
+       cum_par_ticker = (1 + prices[tickers_q].pct_change()).cumprod() - 1
+       cum_r = cum_par_ticker.mean(axis=1).dropna()
+       fig.add_trace(go.Scatter(
+           x=cum_r.index, y=cum_r.values,
+           name=f'{q} (n={len(tickers_q)})',
+           line=dict(color=QUINTILE_COLORS[q], width=2),
+           hovertemplate='%{x|%d %b %Y}<br>%{y:.1%}<extra>'+q+'</extra>',
+       ), secondary_y=False)
 
-    for q in ['Q1','Q2','Q3','Q4','Q5']:
-        tickers_q = valid[valid[quintile_col]==q]['ticker'].dropna().tolist()
-        tickers_q = [t for t in tickers_q if t in prices.columns]
-        if not tickers_q: continue
-        
-        # --- 2. NETTOYAGE : Gestion des prix et calcul propre ---
-        # On remplit les valeurs manquantes (ffill) pour éviter les "trous" qui cassent les courbes
-        subset_prices = prices[tickers_q].ffill()
-        
-        # Calcul rendement : on s'assure que l'index est bien datetime
-        cum_par_ticker = (1 + subset_prices.pct_change()).cumprod() - 1
-        cum_r = cum_par_ticker.mean(axis=1).dropna()
+   fig.add_trace(go.Scatter(
+       x=brent_norm.index, y=brent_norm.values,
+       name='Brent (base 100)',
+       line=dict(color='rgba(59,130,246,0.5)', width=1.5, dash='dot'),
+   ), secondary_y=True)
 
-        fig.add_trace(go.Scatter(
-            x=cum_r.index, 
-            y=cum_r.values,
-            name=f'{q} (n={len(tickers_q)})',
-            line=dict(color=QUINTILE_COLORS[q], width=1.8), # Un peu plus fin pour le cloud
-            mode='lines', # On force le mode lignes sans points
-            hovertemplate='%{x|%d %b %Y}<br>%{y:.1%}<extra>'+q+'</extra>',
-        ), secondary_y=False)
-
-    # Brent
-    fig.add_trace(go.Scatter(
-        x=brent_norm.index, y=brent_norm.values,
-        name='Brent (base 100)',
-        line=dict(color='rgba(59,130,246,0.4)', width=1.2, dash='dot'),
-    ), secondary_y=True)
-
-    # --- 3. LAYOUT : Ajustement des polices et marges ---
-    fig.update_layout(
-        **PLOTLY_LAYOUT, 
-        height=480, # Hauteur fixe pour éviter l'effet compact
-        margin=dict(l=10, r=10, t=20, b=20), # Marges réduites
-        font=dict(size=11), # Taille police globale réduite
-        legend=dict(
-            orientation='h', 
-            yanchor='bottom', 
-            y=1.02, 
-            x=0, 
-            font=dict(size=10) # Légende plus petite
-        )
-    )
-
-    fig.update_yaxes(tickformat='.0%', title_text='Rendement cumulé',
+   fig.update_layout(**PLOTLY_LAYOUT, height=470,
+                     legend=dict(orientation='h', yanchor='bottom', y=1.02, x=0))
+   fig.update_yaxes(tickformat='.0%', title_text='Rendement cumulé',
                     gridcolor='rgba(255,255,255,0.05)', secondary_y=False)
-    fig.update_yaxes(title_text='Brent (base 100)', gridcolor='rgba(0,0,0,0)', secondary_y=True)
-    
-    st.plotly_chart(fig, use_container_width=True)
-
+   fig.update_yaxes(title_text='Brent (base 100)', gridcolor='rgba(0,0,0,0)', secondary_y=True)
+   st.plotly_chart(fig, use_container_width=True)
 
 
 
