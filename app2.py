@@ -600,92 +600,108 @@ badge_text  = "Management Quality" if is_mq else "ACT — Transition Carbone"
 st.markdown(f'<span class="{badge_class}">{badge_text}</span>', unsafe_allow_html=True)
 st.markdown("")
 
-
 def page_composite_proprietaire(valid_act, prices_act, brent, rallies):
-   st.markdown("### 🛠️ Simulateur de Score Composite (Stratégie I, J, K)")
-   st.markdown('<p class="section-title">1. Pondération des variables de transition</p>', unsafe_allow_html=True)
+    st.markdown("### 🛠️ Simulateur de Score Composite (Stratégie I, J, K)")
+    st.markdown('<p class="section-title">1. Pondération des variables de transition</p>', unsafe_allow_html=True)
 
-   # Définition dynamique des colonnes pour éviter les erreurs d'index
-   col_perf  = valid_act.columns[5] # Performance Score
-   col_narr  = valid_act.columns[6] # Narrative (A-E)
-   col_trend = valid_act.columns[7] # Trend (+, =, -)
-   col_sect  = valid_act.columns[3] # Secteur
+    col_perf  = valid_act.columns[5]
+    col_narr  = valid_act.columns[6]
+    col_trend = valid_act.columns[7]
+    col_sect  = valid_act.columns[3]
 
-   # --- UI DE PONDÉRATION ---
-   with st.expander("Paramétrage du Modèle (Coefficients)", expanded=True):
-       c1, c2, c3 = st.columns(3)
-       w_i = c1.number_input("Poids Performance (I)", value=100, step=10)
-       w_j = c2.number_input("Poids Narrative (J)", value=100, step=10)
-       w_k = c3.number_input("Poids Trend (K)", value=100, step=10)
+    # --- DROPDOWN VARIABLE ---
+    dep_choice = st.selectbox(
+        "Variable analysée",
+        ["Rendement", "Volatilité"],
+        key="composite_dep"
+    )
+    use_vol = dep_choice == "Volatilité"
 
-   # --- CALCUL DU SCORE COMPOSITE ---
-   df_c = valid_act.copy()
-   
-   # Mappage qualitatif -> quantitatif (Base 100)
-   map_j = {'A': 100, 'B': 75, 'C': 50, 'D': 25, 'E': 0}
-   map_k = {'+': 100, '=': 50, '-': 0}
-   
-   df_c['val_j'] = df_c[col_narr].map(map_j).fillna(50)
-   df_c['val_k'] = df_c[col_trend].map(map_k).fillna(50)
-   
-   total_w = w_i + w_j + w_k
-   if total_w > 0:
-       # Formule du Score Composite
-       df_c['Composite_Score'] = (df_c[col_perf]*w_i + df_c['val_j']*w_j + df_c['val_k']*w_k) / total_w
-   else:
-       df_c['Composite_Score'] = 0
+    # --- UI DE PONDÉRATION ---
+    with st.expander("Paramétrage du Modèle (Coefficients)", expanded=True):
+        c1, c2, c3 = st.columns(3)
+        w_i = c1.number_input("Poids Performance (I)", value=100, step=10)
+        w_j = c2.number_input("Poids Narrative (J)",   value=100, step=10)
+        w_k = c3.number_input("Poids Trend (K)",       value=100, step=10)
 
-   # Standardisation (Z-Score) pour la lecture de l'Alpha en OLS
-   if df_c['Composite_Score'].std() > 0:
-       df_c['Score_std'] = (df_c['Composite_Score'] - df_c['Composite_Score'].mean()) / df_c['Composite_Score'].std()
-   else:
-       df_c['Score_std'] = 0
+    # --- CALCUL DU SCORE COMPOSITE ---
+    df_c = valid_act.copy()
 
-   # --- STRESS TEST BRENT ---
-   # Calcul du rendement spécifique pendant les périodes de hausse du Brent
-   # On utilise ta fonction existante calc_metriques_brent
-   rdt_brent_dict, _ = calc_metriques_brent(prices_act, df_c['ticker'].tolist(), rallies)
-   df_c['Rdt_Brent'] = df_c['ticker'].map(rdt_brent_dict)
+    map_j = {'A': 100, 'B': 75, 'C': 50, 'D': 25, 'E': 0}
+    map_k = {'+': 100, '=': 50, '-': 0}
 
-   # --- RÉGRESSIONS OLS ---
-   st.markdown('<p class="section-title">2. Analyse de l\'Alpha & Résilience au Choc Pétrolier</p>', unsafe_allow_html=True)
-   
-   # On prépare les données (nettoyage des NaN pour les modèles)
-   data_glob = df_c.dropna(subset=['Rendement_2023_2025', 'Score_std', col_sect])
-   data_brent = df_c.dropna(subset=['Rdt_Brent', 'Score_std', col_sect])
+    df_c['val_j'] = df_c[col_narr].map(map_j).fillna(50)
+    df_c['val_k'] = df_c[col_trend].map(map_k).fillna(50)
 
-   if len(data_glob) > 10 and len(data_brent) > 10:
-       m_glob = smf.ols(f"Rendement_2023_2025 ~ Score_std + C({col_sect})", data=data_glob).fit()
-       m_brent = smf.ols(f"Rdt_Brent ~ Score_std + C({col_sect})", data=data_brent).fit()
+    total_w = w_i + w_j + w_k
+    df_c['Composite_Score'] = (
+        (df_c[col_perf]*w_i + df_c['val_j']*w_j + df_c['val_k']*w_k) / total_w
+        if total_w > 0 else 0
+    )
 
-       # Affichage des résultats
-       res1, res2, res3 = st.columns(3)
-       
-       alpha_g = m_glob.params['Score_std']
-       alpha_b = m_brent.params['Score_std']
-       sig_g = m_glob.pvalues['Score_std']
-       sig_b = m_brent.pvalues['Score_std']
+    if df_c['Composite_Score'].std() > 0:
+        df_c['Score_std'] = (df_c['Composite_Score'] - df_c['Composite_Score'].mean()) / df_c['Composite_Score'].std()
+    else:
+        df_c['Score_std'] = 0
 
-       # Utilisation de ta fonction metric_card si elle existe, sinon st.metric
-       metric_card(res1, "Alpha Global (std)", f"{alpha_g:+.4f}", sig_g < 0.05)
-       metric_card(res2, "Alpha Brent (std)", f"{alpha_b:+.4f}", sig_b < 0.05)
-       
-       diff = alpha_b - alpha_g
-       metric_card(res3, "Gain de Résilience", f"{diff:+.4f}", diff > 0)
+    # --- STRESS TEST BRENT ---
+    rdt_brent_dict, vol_brent_dict = calc_metriques_brent(prices_act, df_c['ticker'].tolist(), rallies)
+    df_c['Rdt_Brent'] = df_c['ticker'].map(rdt_brent_dict)
+    df_c['Vol_Brent'] = df_c['ticker'].map(vol_brent_dict)
 
-       # Tabs pour les détails
-       with st.expander("Consulter les rapports statistiques détaillés"):
-           t1, t2 = st.tabs(["Régression Période Totale", "Régression Période Brent-Up"])
-           t1.code(m_glob.summary().as_text())
-           t2.code(m_brent.summary().as_text())
-   else:
-       st.warning("Échantillon trop faible pour générer les régressions.")
+    # --- SÉLECTION DES COLONNES SELON LE CHOIX ---
+    if use_vol:
+        col_glob  = 'Volatilite_2023_2025'
+        col_brent = 'Vol_Brent'
+        fmt       = '.4f'   # volatilité → pas de % dans les alphas OLS
+        label_glob  = "Alpha Vol. Global (std)"
+        label_brent = "Alpha Vol. Brent (std)"
+        label_resil = "Réduction Volatilité"
+        resil_positive = lambda diff: diff < 0  # bon signe si vol baisse
+    else:
+        col_glob  = 'Rendement_2023_2025'
+        col_brent = 'Rdt_Brent'
+        fmt       = '+.4f'
+        label_glob  = "Alpha Global (std)"
+        label_brent = "Alpha Brent (std)"
+        label_resil = "Gain de Résilience"
+        resil_positive = lambda diff: diff > 0
 
-   # --- TABLEAU RÉCAPITULATIF ---
-   st.markdown('<p class="section-title">3. Aperçu des meilleurs scores composites</p>', unsafe_allow_html=True)
-   top_df = df_c.sort_values('Composite_Score', ascending=False).head(15)
-   st.dataframe(top_df[[df_c.columns[0], 'ticker', col_perf, col_narr, col_trend, 'Composite_Score']], use_container_width=True, hide_index=True)
+    # --- RÉGRESSIONS OLS ---
+    st.markdown('<p class="section-title">2. Analyse de l\'Alpha & Résilience au Choc Pétrolier</p>', unsafe_allow_html=True)
 
+    data_glob  = df_c.dropna(subset=[col_glob,  'Score_std', col_sect])
+    data_brent = df_c.dropna(subset=[col_brent, 'Score_std', col_sect])
+
+    if len(data_glob) > 10 and len(data_brent) > 10:
+        m_glob  = smf.ols(f"{col_glob}  ~ Score_std + C({col_sect})", data=data_glob).fit(cov_type='HC3')
+        m_brent = smf.ols(f"{col_brent} ~ Score_std + C({col_sect})", data=data_brent).fit(cov_type='HC3')
+
+        alpha_g = m_glob.params['Score_std']
+        alpha_b = m_brent.params['Score_std']
+        sig_g   = m_glob.pvalues['Score_std']
+        sig_b   = m_brent.pvalues['Score_std']
+        diff    = alpha_b - alpha_g
+
+        res1, res2, res3 = st.columns(3)
+        metric_card(res1, label_glob,  f"{alpha_g:{fmt}} {sig_stars(sig_g)}", sig_g < 0.05)
+        metric_card(res2, label_brent, f"{alpha_b:{fmt}} {sig_stars(sig_b)}", sig_b < 0.05)
+        metric_card(res3, label_resil, f"{diff:{fmt}}", resil_positive(diff))
+
+        with st.expander("Consulter les rapports statistiques détaillés"):
+            t1, t2 = st.tabs(["Régression Période Totale", "Régression Période Brent-Up"])
+            t1.code(m_glob.summary().as_text())
+            t2.code(m_brent.summary().as_text())
+    else:
+        st.warning("Échantillon trop faible pour générer les régressions.")
+
+    # --- TABLEAU RÉCAPITULATIF ---
+    st.markdown('<p class="section-title">3. Aperçu des meilleurs scores composites</p>', unsafe_allow_html=True)
+    top_df = df_c.sort_values('Composite_Score', ascending=False).head(15)
+    st.dataframe(
+        top_df[[df_c.columns[0], 'ticker', col_perf, col_narr, col_trend, 'Composite_Score']],
+        use_container_width=True, hide_index=True
+    )
 def calc_metriques_brent(prices, tickers, rallies):
    """
    Calcule le rendement cumulé ET la volatilité annualisée
