@@ -22,7 +22,7 @@ import requests, os
 import plotly.express as px
 
 
-st.set_page_config(layout="wide")
+
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 st.set_page_config(
    page_title="TPI · Analyse Financière",
@@ -323,8 +323,14 @@ def page_panel(valid, prices, brent, rallies, quintile_col, company_col='Company
        tickers_q = valid[valid[quintile_col]==q]['ticker'].dropna().tolist()
        tickers_q = [t for t in tickers_q if t in prices.columns]
        if not tickers_q: continue
-       cum_par_ticker = (1 + prices[tickers_q].pct_change()).cumprod() - 1
+       px_q = prices[tickers_q].copy()
+       first_common = px_q.dropna(how='all').index[0]
+       px_q = px_q.loc[first_common:].ffill()
+
+       cum_par_ticker = (1 + px_q.pct_change()).cumprod() - 1
        cum_r = cum_par_ticker.mean(axis=1).dropna()
+      
+      
        fig.add_trace(go.Scatter(
            x=cum_r.index, y=cum_r.values,
            name=f'{q} (n={len(tickers_q)})',
