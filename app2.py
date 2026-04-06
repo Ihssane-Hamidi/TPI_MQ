@@ -20,6 +20,9 @@ import yfinance as yf
 import statsmodels.formula.api as smf
 import requests, os
 import plotly.express as px
+
+
+st.set_page_config(layout="wide")
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 st.set_page_config(
    page_title="TPI · Analyse Financière",
