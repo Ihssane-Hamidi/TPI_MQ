@@ -670,8 +670,9 @@ def page_composite_proprietaire(valid_act, prices_act, brent, rallies):
     # --- RÉGRESSIONS OLS ---
     st.markdown('<p class="section-title">2. Analyse de l\'Alpha & Résilience au Choc Pétrolier</p>', unsafe_allow_html=True)
 
-    data_glob  = df_c.dropna(subset=[col_glob,  'Score_std', col_sect])
-    data_brent = df_c.dropna(subset=[col_brent, 'Score_std', col_sect])
+    data_glob = df_c.dropna(subset=[col_glob, 'Score_std', col_sect]).copy()
+    data_glob = prepare_ols_data(data_glob, 'Composite_Score', col_sect)  # ← regroupe secteurs rares
+    data_glob[col_glob] = winsorize(data_glob[col_glob])                  # ← winsorise Y
 
     if len(data_glob) > 10 and len(data_brent) > 10:
         m_glob  = smf.ols(f"{col_glob}  ~ Score_std + C({col_sect})", data=data_glob).fit(cov_type='HC3')
