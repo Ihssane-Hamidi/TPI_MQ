@@ -609,12 +609,25 @@ def page_composite_proprietaire(valid_act, prices_act, brent, rallies):
     col_trend = valid_act.columns[7]
     col_sect  = valid_act.columns[3]
 
-    # --- DROPDOWN VARIABLE ---
-    dep_choice = st.selectbox(
-        "Variable analysée",
-        ["Rendement", "Volatilité"],
-        key="composite_dep"
-    )
+    # --- DROPDOWNS ---
+    c_sel1, c_sel2, c_sel3 = st.columns(3)
+    with c_sel1:
+        dep_choice = st.selectbox(
+            "Variable analysée",
+            ["Rendement", "Volatilité"],
+            key="composite_dep"
+        )
+    with c_sel2:
+        model_choice = st.selectbox(
+            "Modèle",
+            ['simple', 'interaction', 'fama_french'],
+            format_func=lambda x: {
+                'simple':      'Modèle 1 · Simple (Score + Secteur)',
+                'interaction': 'Modèle 2 · Interaction Score × Secteur',
+                'fama_french': 'Modèle 3 · Fama-French (Score + Secteur + Taille + B/M)',
+            }[x],
+            key="composite_model"
+        )
     use_vol = dep_choice == "Volatilité"
 
     # --- UI DE PONDÉRATION ---
@@ -639,7 +652,6 @@ def page_composite_proprietaire(valid_act, prices_act, brent, rallies):
         if total_w > 0 else 0
     )
 
-    # Standardisation Z-score
     if df_c['Composite_Score'].std() > 0:
         df_c['Score_std'] = (
             (df_c['Composite_Score'] - df_c['Composite_Score'].mean())
@@ -673,38 +685,56 @@ def page_composite_proprietaire(valid_act, prices_act, brent, rallies):
         label_resil = "Gain de Résilience"
         resil_ok    = lambda diff: diff > 0
 
+    # --- CONSTRUCTION DE LA FORMULE ---
+    def build_formula(dep_var, model_type):
+        if model_type == 'interaction':
+            return f"{dep_var} ~ Score_std * C({col_sect})"
+        elif model_type == 'fama_french':
+            return f"{dep_var} ~ Score_std + C({col_sect}) + LogMarketCap + BookToMarket"
+        else:
+            return f"{dep_var} ~ Score_std + C({col_sect})"
+
+    # --- PRÉPARATION DONNÉES ---
+    # Colonnes nécessaires selon le modèle
+    extra_cols = ['LogMarketCap', 'BookToMarket'] if model_choice == 'fama_french' else []
+
+    base_cols_glob  = [col_glob,  'Composite_Score', col_sect] + extra_cols
+    base_cols_brent = [col_brent, 'Composite_Score', col_sect] + extra_cols
+
+    data_glob  = df_c.dropna(subset=[c for c in base_cols_glob  if c in df_c.columns]).copy()
+    data_brent = df_c.dropna(subset=[c for c in base_cols_brent if c in df_c.columns]).copy()
+
+    data_glob  = prepare_ols_data(data_glob,  'Composite_Score', col_sect)
+    data_brent = prepare_ols_data(data_brent, 'Composite_Score', col_sect)
+
+    data_glob[col_glob]   = winsorize(data_glob[col_glob])
+    data_brent[col_brent] = winsorize(data_brent[col_brent])
+
+    n_glob        = len(data_glob)
+    n_brent       = len(data_brent)
+    n_sect_glob   = data_glob[col_sect].nunique()
+    n_sect_brent  = data_brent[col_sect].nunique()
+
     # --- RÉGRESSIONS OLS ---
     st.markdown(
         '<p class="section-title">2. Analyse de l\'Alpha & Résilience au Choc Pétrolier</p>',
         unsafe_allow_html=True
     )
 
-    # Préparation données globales — alignée avec page_ols
-    data_glob = df_c.dropna(subset=[col_glob, 'Composite_Score', col_sect]).copy()
-    data_glob = prepare_ols_data(data_glob, 'Composite_Score', col_sect)
-    data_glob[col_glob] = winsorize(data_glob[col_glob])
-
-    # Préparation données Brent
-    data_brent = df_c.dropna(subset=[col_brent, 'Composite_Score', col_sect]).copy()
-    data_brent = prepare_ols_data(data_brent, 'Composite_Score', col_sect)
-    data_brent[col_brent] = winsorize(data_brent[col_brent])
-
-    n_glob  = len(data_glob)
-    n_brent = len(data_brent)
-    n_sect_glob  = data_glob[col_sect].nunique()
-    n_sect_brent = data_brent[col_sect].nunique()
+    st.markdown(f"""<div class="note-box">
+        Régression sur <b>{n_glob}</b> entreprises (modèle global) · 
+        <b>{n_brent}</b> entreprises (modèle Brent-up)<br>
+        Méthode : OLS avec erreurs robustes (HC3) · Score standardisé (Z-score) · 
+        Secteurs regroupés (N &lt; 8)
+    </div>""", unsafe_allow_html=True)
 
     if n_glob > (n_sect_glob + 10) and n_brent > (n_sect_brent + 10):
         try:
-            m_glob = smf.ols(
-                f"{col_glob} ~ Score_std + C({col_sect})",
-                data=data_glob
-            ).fit(cov_type='HC3')
+            formula_glob  = build_formula(col_glob,  model_choice)
+            formula_brent = build_formula(col_brent, model_choice)
 
-            m_brent = smf.ols(
-                f"{col_brent} ~ Score_std + C({col_sect})",
-                data=data_brent
-            ).fit(cov_type='HC3')
+            m_glob  = smf.ols(formula_glob,  data=data_glob).fit(cov_type='HC3')
+            m_brent = smf.ols(formula_brent, data=data_brent).fit(cov_type='HC3')
 
             alpha_g = m_glob.params['Score_std']
             alpha_b = m_brent.params['Score_std']
@@ -712,11 +742,48 @@ def page_composite_proprietaire(valid_act, prices_act, brent, rallies):
             sig_b   = m_brent.pvalues['Score_std']
             diff    = alpha_b - alpha_g
 
-            res1, res2, res3 = st.columns(3)
-            metric_card(res1, label_glob,  f"{alpha_g:{fmt}} {sig_stars(sig_g)}", sig_g < 0.05)
-            metric_card(res2, label_brent, f"{alpha_b:{fmt}} {sig_stars(sig_b)}", sig_b < 0.05)
-            metric_card(res3, label_resil, f"{diff:{fmt}}", resil_ok(diff))
+            # Metric cards
+            res1, res2, res3, res4 = st.columns(4)
+            metric_card(res1, label_glob,       f"{alpha_g:{fmt}} {sig_stars(sig_g)}", sig_g < 0.05)
+            metric_card(res2, label_brent,      f"{alpha_b:{fmt}} {sig_stars(sig_b)}", sig_b < 0.05)
+            metric_card(res3, label_resil,      f"{diff:{fmt}}",                       resil_ok(diff))
+            metric_card(res4, "R² (Glob / Br)", f"{m_glob.rsquared_adj:.2f} / {m_brent.rsquared_adj:.2f}", True)
 
+            # Graphique interaction par secteur
+            if model_choice == 'interaction':
+                st.markdown(
+                    '<p class="section-title">Effet du score par secteur — global vs Brent-up</p>',
+                    unsafe_allow_html=True
+                )
+                sectors_list = sorted(data_glob[col_sect].unique())
+                data_sect = []
+                for s in sectors_list:
+                    # Pente globale
+                    p_g = m_glob.params.get('Score_std', 0)
+                    inter_g = f'Score_std:C({col_sect})[T.{s}]'
+                    if inter_g in m_glob.params:
+                        p_g += m_glob.params[inter_g]
+
+                    # Pente Brent
+                    p_b = m_brent.params.get('Score_std', 0)
+                    inter_b = f'Score_std:C({col_sect})[T.{s}]'
+                    if inter_b in m_brent.params:
+                        p_b += m_brent.params[inter_b]
+
+                    data_sect.append({"Secteur": s, "Modèle": "Global",   "Coefficient": p_g})
+                    data_sect.append({"Secteur": s, "Modèle": "Brent-up", "Coefficient": p_b})
+
+                df_plot_s = pd.DataFrame(data_sect)
+                fig_s = px.bar(
+                    df_plot_s, x="Coefficient", y="Secteur",
+                    color="Modèle", barmode="group", orientation='h',
+                    color_discrete_map={"Global": "#636EFA", "Brent-up": "#EF553B"}
+                )
+                fig_s.update_layout(PLOTLY_LAYOUT, height=500,
+                                    margin=dict(l=20, r=20, t=20, b=20))
+                st.plotly_chart(fig_s, use_container_width=True)
+
+            # Rapports détaillés
             with st.expander("Consulter les rapports statistiques détaillés"):
                 t1, t2 = st.tabs(["Régression Période Totale", "Régression Période Brent-Up"])
                 t1.code(m_glob.summary().as_text())
